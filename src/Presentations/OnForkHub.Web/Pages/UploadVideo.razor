@@ -1,0 +1,80 @@
+@page "/UploadVideo"
+@using System.Net.Http.Headers
+@inject HttpClient Http
+
+<h3>Upload de Vídeo</h3>
+
+<InputFile OnChange="HandleFileSelected" />
+<button @onclick="UploadVideoAsync">Upload</button>
+
+<p>@statusMessage</p>
+
+@code {
+    private IBrowserFile? selectedFile;
+    private string statusMessage = string.Empty;
+    private int maxfileSizeInMb = 10;
+    private int chunkSizeInKb = 2048;
+
+    private void HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        selectedFile = e.File;
+    }
+
+    private async Task UploadVideoAsync()
+    {
+        if (selectedFile == null)
+        {
+            statusMessage = "Selecione um arquivo.";
+            return;
+        }
+
+        // Max file size
+        long maxFileSize = maxfileSizeInMb * 1024 * 1024;
+
+        if (selectedFile.Size > maxFileSize)
+        {
+            statusMessage = "O arquivo excede o tamanho máximo permitido (10MB).";
+            return;
+        }
+
+        statusMessage = "Iniciando upload...";
+
+        var chunkSize = chunkSizeInKb * 1024; // 1MB por chunk
+        var totalChunks = (int)Math.Ceiling((double)selectedFile.Size / chunkSize);
+        var fileId = Guid.NewGuid().ToString();
+
+        Http.BaseAddress = new Uri("https://localhost:7180");
+
+        // Send chunks
+        for (int i = 0; i < totalChunks; i++)
+        {
+            var buffer = new byte[chunkSize];
+            await selectedFile.OpenReadStream(maxFileSize).ReadAsync(buffer, 0, chunkSize);
+
+            var formData = new MultipartFormDataContent();
+            var streamContent = new ByteArrayContent(buffer);
+            streamContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+            formData.Add(streamContent, "chunk", selectedFile.Name);
+
+            // Send chunk to backend
+            var response = await Http.PostAsync($"/upload?fileId={fileId}&chunkIndex={i}", formData);
+            if (!response.IsSuccessStatusCode)
+            {
+                statusMessage = "Erro ao enviar o chunk " + i;
+                return;
+            }
+            Console.WriteLine("chunk carregada:" + i);
+        }
+
+        // Finish upload
+        var finalizeResponse = await Http.PostAsync($"/finalize-upload?fileId={fileId}&fileName={selectedFile.Name}", null);
+        if (finalizeResponse.IsSuccessStatusCode)
+        {
+            statusMessage = "Upload finalizado com sucesso!";
+        }
+        else
+        {
+            statusMessage = "Erro ao finalizar o upload.";
+        }
+    }
+}
