@@ -12,7 +12,7 @@
 @code {
     private IBrowserFile? selectedFile;
     private string statusMessage = string.Empty;
-    private int maxfileSizeInMb = 10;
+    private int maxfileSizeInMb = 50;
     private int chunkSizeInKb = 2048;
 
     private void HandleFileSelected(InputFileChangeEventArgs e)
@@ -33,23 +33,30 @@
 
         if (selectedFile.Size > maxFileSize)
         {
-            statusMessage = "O arquivo excede o tamanho máximo permitido (10MB).";
+            statusMessage = $"O arquivo excede o tamanho máximo permitido {maxfileSizeInMb}MB.";
             return;
         }
 
         statusMessage = "Iniciando upload...";
 
-        var chunkSize = chunkSizeInKb * 1024; // 1MB por chunk
+        var chunkSize = chunkSizeInKb * 1024;
         var totalChunks = (int)Math.Ceiling((double)selectedFile.Size / chunkSize);
         var fileId = Guid.NewGuid().ToString();
 
         Http.BaseAddress = new Uri("https://localhost:7180");
 
+        var stream = selectedFile.OpenReadStream(maxFileSize);
+
         // Send chunks
         for (int i = 0; i < totalChunks; i++)
         {
-            var buffer = new byte[chunkSize];
-            await selectedFile.OpenReadStream(maxFileSize).ReadAsync(buffer, 0, chunkSize);
+            byte[] buffer = new byte[chunkSize];
+            int bytesRead = await stream.ReadAsync(buffer, 0, chunkSize);
+
+            if (bytesRead < chunkSize)
+            {
+                Array.Resize(ref buffer, bytesRead); // Resize buffer to last chunk
+            }
 
             var formData = new MultipartFormDataContent();
             var streamContent = new ByteArrayContent(buffer);
@@ -63,7 +70,7 @@
                 statusMessage = "Erro ao enviar o chunk " + i;
                 return;
             }
-            Console.WriteLine("chunk carregada:" + i);
+            Console.WriteLine($"Chunk {i} enviada. Tamanho: {bytesRead}");
         }
 
         // Finish upload

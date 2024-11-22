@@ -32,7 +32,7 @@ app.MapPost(
         "/upload",
         async (IFormFile chunk, string fileId, int chunkIndex) =>
         {
-            var chunkPath = Path.Combine(tempDir, $"{fileId}_chunk_{chunkIndex}");
+            var chunkPath = Path.Combine(tempDir, $"{fileId}_chunk_{chunkIndex:D5}");
 
             using (var stream = new FileStream(chunkPath, FileMode.Create))
             {
@@ -61,7 +61,7 @@ app.MapPost(
                 }
 
                 // Remove the chunk after joining.
-                // File.Delete(chunk);
+                File.Delete(chunk);
             }
         }
 
